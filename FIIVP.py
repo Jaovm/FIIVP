@@ -9,7 +9,7 @@ st.title("Análise de FIIs com base no P/VP")
 
 fiis = [
     'HGRU11', 'BTLG11', 'ALZR11', 'HGLG11', 'BRCO11', 'XPLG11', 'KNRI11', 'MALL11', 'VISC11',
-    'MXRF11', 'VGIA11', 'BCRI11', 'VILG11', 'HCCI11', 'XPIN11', 'HGR11', 'VINO11'
+    'MXRF11', 'VGIA11', 'BCRI11', 'VILG11', 'LVBI11', 'XPIN11', 'HGR11', 'VINO11'
 ]
 
 @st.cache_data(show_spinner=True)
