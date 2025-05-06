@@ -1,40 +1,47 @@
 import streamlit as st
 import pandas as pd
 import requests
-
-# Lista de FIIs da carteira
-fiis = [
-    'HGRU11', 'BTLG11', 'ALZR11', 'HGLG11', 'BRCO11', 'XPLG11', 'KNRI11', 'MALL11', 'VISC11',
-    'MXRF11', 'VGIA11', 'BCRI11', 'VILG11', 'LVBI11', 'XPIN11', 'HGR11', 'VINO11'
-]
+from bs4 import BeautifulSoup
+import time
 
 st.set_page_config(page_title="Análise de FIIs por P/VP", layout="wide")
 st.title("Análise de FIIs com base no P/VP")
 
-st.markdown("FIIs com **P/VP abaixo de 1** são considerados, em tese, descontados em relação ao valor patrimonial.")
+fiis = [
+    'HGRU11', 'BTLG11', 'ALZR11', 'HGLG11', 'BRCO11', 'XPLG11', 'KNRI11', 'MALL11', 'VISC11',
+    'MXRF11', 'VGIA11', 'BCRI11', 'VILG11', 'HCCI11', 'XPIN11', 'HGR11', 'VINO11'
+]
 
-@st.cache_data
-def carregar_dados_fiis(fiis):
-    base_url = "https://www.fundsexplorer.com.br/wp-json/funds/v1/funds/"
+@st.cache_data(show_spinner=True)
+def carregar_dados_status_invest(fiis):
     dados = []
     for fii in fiis:
         try:
-            response = requests.get(f"{base_url}{fii}")
-            if response.status_code == 200:
-                data = response.json()
-                dados.append({
-                    'FII': fii,
-                    'Setor': data.get('segment', 'N/A'),
-                    'P/VP': float(data.get('p_vp', 0)),
-                    'Preço Atual': float(data.get('price', 0)),
-                    'Valor Patrimonial': float(data.get('equity_value', 0)),
-                    'Dividend Yield (%)': float(data.get('dividend_yield', 0)) * 100,
-                })
+            url = f'https://statusinvest.com.br/fundos-imobiliarios/{fii.lower()}'
+            headers = {"User-Agent": "Mozilla/5.0"}
+            r = requests.get(url, headers=headers)
+            soup = BeautifulSoup(r.text, 'html.parser')
+
+            pvp_elem = soup.select_one("strong#pvp")
+            dy_elem = soup.select_one("strong#dy")
+            preco_elem = soup.select_one("strong#currentPrice")
+
+            pvp = float(pvp_elem.text.replace(",", ".")) if pvp_elem else None
+            dy = float(dy_elem.text.replace(",", ".")) if dy_elem else None
+            preco = float(preco_elem.text.replace("R$", "").replace(",", ".")) if preco_elem else None
+
+            dados.append({
+                'FII': fii,
+                'P/VP': pvp,
+                'Dividend Yield (%)': dy,
+                'Preço Atual (R$)': preco
+            })
+            time.sleep(1.5)  # para evitar bloqueios por scraping
         except Exception as e:
-            st.warning(f"Erro ao carregar dados de {fii}: {e}")
+            st.warning(f"Erro ao buscar dados de {fii}: {e}")
     return pd.DataFrame(dados)
 
-df = carregar_dados_fiis(fiis)
+df = carregar_dados_status_invest(fiis)
 
 if df.empty:
     st.error("Não foi possível carregar os dados dos FIIs.")
@@ -47,4 +54,4 @@ else:
     fiis_baratos = df[df['P/VP'] < pvp_limite].sort_values(by='P/VP')
     st.dataframe(fiis_baratos)
 
-    st.markdown("**Disclaimer:** P/VP baixo pode indicar desconto, mas deve ser analisado com outros fundamentos (vacância, localização, qualidade da gestão etc.).")
+    st.markdown("**Disclaimer:** P/VP baixo pode indicar desconto, mas é necessário analisar outros fatores.")
