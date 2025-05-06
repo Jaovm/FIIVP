@@ -1,62 +1,44 @@
 import streamlit as st
 import pandas as pd
-import requests
-from bs4 import BeautifulSoup
-import time
 
 st.set_page_config(page_title="Análise de FIIs por P/VP", layout="wide")
 st.title("Análise de FIIs com base no P/VP")
 
-fiis = [
-    'HGRU11', 'BTLG11', 'ALZR11', 'HGLG11', 'BRCO11', 'XPLG11', 'KNRI11', 'MALL11', 'VISC11',
-    'MXRF11', 'VGIA11', 'BCRI11', 'VILG11', 'LVBI11', 'XPIN11', 'HGR11', 'VINO11'
+fiis_usuario = [
+    'HGRU11', 'BTLG11', 'ALZR11', 'HGLG11', 'BRCO11', 'XPLG11', 'KNRI11', 'MALL11',
+    'VISC11', 'MXRF11', 'VGIA11', 'BCRI11', 'VILG11', 'HCCI11', 'XPIN11', 'HGR11', 'VINO11'
 ]
 
 @st.cache_data(show_spinner=True)
-def carregar_dados_status_invest(fiis):
-    dados = []
-    for fii in fiis:
-        try:
-            url = f'https://statusinvest.com.br/fundos-imobiliarios/{fii.lower()}'
-            headers = {"User-Agent": "Mozilla/5.0"}
-            r = requests.get(url, headers=headers)
-            soup = BeautifulSoup(r.text, 'html.parser')
+def carregar_dados_funds_explorer():
+    url = 'https://www.fundsexplorer.com.br/ranking'
+    try:
+        df = pd.read_html(url, decimal=',', thousands='.')[0]
+        df.columns = df.columns.droplevel(0) if isinstance(df.columns, pd.MultiIndex) else df.columns
+        df = df.rename(columns={'Códigodo fundo': 'FII'})
+        df['P/VP'] = pd.to_numeric(df['P/VP'], errors='coerce')
+        df['Dividend Yield'] = pd.to_numeric(df['Dividend Yield'], errors='coerce')
+        df['Preço Atual'] = pd.to_numeric(df['Preço Atual'], errors='coerce')
+        return df
+    except Exception as e:
+        st.error(f"Erro ao carregar dados: {e}")
+        return pd.DataFrame()
 
-            def extrair_valor(label):
-                try:
-                    div = soup.find('h3', string=label)
-                    if div:
-                        return float(div.find_next('strong').text.strip().replace('R$', '').replace('%', '').replace(',', '.'))
-                except:
-                    return None
+df = carregar_dados_funds_explorer()
 
-            preco = extrair_valor("Cotação")
-            pvp = extrair_valor("P/VP")
-            dy = extrair_valor("Dividend yield")
+if not df.empty:
+    df_carteira = df[df['FII'].isin(fiis_usuario)].copy()
+    df_carteira = df_carteira[['FII', 'Setor', 'Preço Atual', 'Dividend Yield', 'P/VP']]
+    df_carteira = df_carteira.sort_values(by='P/VP')
 
-            dados.append({
-                'FII': fii,
-                'Preço Atual (R$)': preco,
-                'P/VP': pvp,
-                'Dividend Yield (%)': dy,
-            })
+    st.subheader("FIIs da Carteira")
+    st.dataframe(df_carteira, use_container_width=True)
 
-            time.sleep(1.5)
-        except Exception as e:
-            st.warning(f"Erro ao buscar dados de {fii}: {e}")
-    return pd.DataFrame(dados)
+    st.subheader("FIIs com P/VP abaixo de 1")
+    limite_pvp = st.slider("Limite máximo de P/VP:", min_value=0.5, max_value=1.5, value=1.0, step=0.05)
+    filtrados = df_carteira[df_carteira['P/VP'] < limite_pvp]
+    st.dataframe(filtrados, use_container_width=True)
 
-df = carregar_dados_status_invest(fiis)
-
-if df.empty:
-    st.error("Não foi possível carregar os dados dos FIIs.")
+    st.markdown("**Observação:** P/VP abaixo de 1 pode indicar desconto, mas analise também qualidade da gestão, vacância, contratos e liquidez.")
 else:
-    st.subheader("Todos os FIIs da carteira:")
-    st.dataframe(df.sort_values(by='P/VP', ascending=True))
-
-    st.subheader("FIIs com P/VP abaixo de 1 (potencial desconto):")
-    pvp_limite = st.slider("Filtro de P/VP máximo:", min_value=0.5, max_value=1.5, value=1.0, step=0.05)
-    fiis_baratos = df[df['P/VP'] < pvp_limite].sort_values(by='P/VP')
-    st.dataframe(fiis_baratos)
-
-    st.markdown("**Disclaimer:** P/VP baixo pode indicar desconto, mas deve ser analisado com outros fundamentos.")
+    st.error("Não foi possível carregar os dados.")
