@@ -22,21 +22,26 @@ def carregar_dados_status_invest(fiis):
             r = requests.get(url, headers=headers)
             soup = BeautifulSoup(r.text, 'html.parser')
 
-            pvp_elem = soup.select_one("strong#pvp")
-            dy_elem = soup.select_one("strong#dy")
-            preco_elem = soup.select_one("strong#currentPrice")
+            def extrair_valor(label):
+                try:
+                    div = soup.find('h3', string=label)
+                    if div:
+                        return float(div.find_next('strong').text.strip().replace('R$', '').replace('%', '').replace(',', '.'))
+                except:
+                    return None
 
-            pvp = float(pvp_elem.text.replace(",", ".")) if pvp_elem else None
-            dy = float(dy_elem.text.replace(",", ".")) if dy_elem else None
-            preco = float(preco_elem.text.replace("R$", "").replace(",", ".")) if preco_elem else None
+            preco = extrair_valor("Cotação")
+            pvp = extrair_valor("P/VP")
+            dy = extrair_valor("Dividend yield")
 
             dados.append({
                 'FII': fii,
+                'Preço Atual (R$)': preco,
                 'P/VP': pvp,
                 'Dividend Yield (%)': dy,
-                'Preço Atual (R$)': preco
             })
-            time.sleep(1.5)  # para evitar bloqueios por scraping
+
+            time.sleep(1.5)
         except Exception as e:
             st.warning(f"Erro ao buscar dados de {fii}: {e}")
     return pd.DataFrame(dados)
@@ -47,11 +52,11 @@ if df.empty:
     st.error("Não foi possível carregar os dados dos FIIs.")
 else:
     st.subheader("Todos os FIIs da carteira:")
-    st.dataframe(df.sort_values(by='P/VP'))
+    st.dataframe(df.sort_values(by='P/VP', ascending=True))
 
     st.subheader("FIIs com P/VP abaixo de 1 (potencial desconto):")
     pvp_limite = st.slider("Filtro de P/VP máximo:", min_value=0.5, max_value=1.5, value=1.0, step=0.05)
     fiis_baratos = df[df['P/VP'] < pvp_limite].sort_values(by='P/VP')
     st.dataframe(fiis_baratos)
 
-    st.markdown("**Disclaimer:** P/VP baixo pode indicar desconto, mas é necessário analisar outros fatores.")
+    st.markdown("**Disclaimer:** P/VP baixo pode indicar desconto, mas deve ser analisado com outros fundamentos.")
